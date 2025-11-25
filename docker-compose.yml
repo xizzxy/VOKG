@@ -1,0 +1,288 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: vokg-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vokg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-vokg}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vokg}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================
+  # Neo4j Graph Database
+  # ============================================
+  neo4j:
+    image: neo4j:5.13-community
+    container_name: vokg-neo4j
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 2g
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================
+  # Redis Cache & Message Broker
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: vokg-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================
+  # MinIO Object Storage
+  # ============================================
+  minio:
+    image: minio/minio:latest
+    container_name: vokg-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================
+  # API Gateway
+  # ============================================
+  api:
+    build:
+      context: .
+      dockerfile: docker/api_gateway.Dockerfile
+    container_name: vokg-api
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      NEO4J_URI: bolt://neo4j:7687
+      S3_ENDPOINT_URL: http://minio:9000
+    volumes:
+      - ./backend:/app/backend
+      - upload_temp:/tmp/vokg
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn backend.api_gateway.main:app
+             --host 0.0.0.0
+             --port 8000
+             --reload"
+    restart: unless-stopped
+
+  # ============================================
+  # Celery Worker (CPU tasks)
+  # ============================================
+  worker-cpu:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: vokg-worker-cpu
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      NEO4J_URI: bolt://neo4j:7687
+      S3_ENDPOINT_URL: http://minio:9000
+    volumes:
+      - ./backend:/app/backend
+      - worker_temp:/tmp/vokg
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A backend.core.celery_app worker
+      --loglevel=info
+      --queues=cpu,default
+      --concurrency=4
+      --max-tasks-per-child=50
+    restart: unless-stopped
+
+  # ============================================
+  # Celery Worker (GPU tasks - SAM 2)
+  # ============================================
+  worker-gpu:
+    build:
+      context: .
+      dockerfile: docker/gpu_worker.Dockerfile
+    container_name: vokg-worker-gpu
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      NEO4J_URI: bolt://neo4j:7687
+      S3_ENDPOINT_URL: http://minio:9000
+      NVIDIA_VISIBLE_DEVICES: all
+    volumes:
+      - ./backend:/app/backend
+      - ./models:/models  # Mount SAM 2 models
+      - worker_temp:/tmp/vokg
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      celery -A backend.core.celery_app worker
+      --loglevel=info
+      --queues=gpu
+      --concurrency=1
+      --max-tasks-per-child=10
+    restart: unless-stopped
+
+  # ============================================
+  # Celery Worker (LLM tasks)
+  # ============================================
+  worker-llm:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: vokg-worker-llm
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      NEO4J_URI: bolt://neo4j:7687
+      S3_ENDPOINT_URL: http://minio:9000
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A backend.core.celery_app worker
+      --loglevel=info
+      --queues=llm
+      --concurrency=2
+      --max-tasks-per-child=20
+    restart: unless-stopped
+
+  # ============================================
+  # Celery Worker (Graph tasks)
+  # ============================================
+  worker-graph:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: vokg-worker-graph
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      NEO4J_URI: bolt://neo4j:7687
+      S3_ENDPOINT_URL: http://minio:9000
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    command: >
+      celery -A backend.core.celery_app worker
+      --loglevel=info
+      --queues=graph
+      --concurrency=2
+      --max-tasks-per-child=30
+    restart: unless-stopped
+
+  # ============================================
+  # Celery Flower (Monitoring)
+  # ============================================
+  flower:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: vokg-flower
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    command: >
+      celery -A backend.core.celery_app flower
+      --port=5555
+      --broker=redis://redis:6379/0
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:
+  redis_data:
+  minio_data:
+  upload_temp:
+  worker_temp:
