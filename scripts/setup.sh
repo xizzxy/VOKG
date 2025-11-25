@@ -13,26 +13,26 @@ echo ""
 echo "Checking prerequisites..."
 
 if ! command -v docker &> /dev/null; then
-    echo "❌ Docker not found. Please install Docker first."
+    echo " Docker not found. Please install Docker first."
     exit 1
 fi
 
 if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose not found. Please install Docker Compose first."
+    echo " Docker Compose not found. Please install Docker Compose first."
     exit 1
 fi
 
-echo "✅ Docker found: $(docker --version)"
-echo "✅ Docker Compose found: $(docker-compose --version)"
+echo " Docker found: $(docker --version)"
+echo " Docker Compose found: $(docker-compose --version)"
 echo ""
 
 # Check NVIDIA GPU
 echo "Checking NVIDIA GPU..."
 if docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi &> /dev/null; then
-    echo "✅ NVIDIA GPU detected"
+    echo " NVIDIA GPU detected"
     nvidia-smi | grep "CUDA Version"
 else
-    echo "⚠️  NVIDIA GPU not detected or nvidia-container-toolkit not installed"
+    echo "  NVIDIA GPU not detected or nvidia-container-toolkit not installed"
     echo "   GPU workers will not function. See: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
 fi
 echo ""
@@ -50,15 +50,15 @@ if [ ! -f .env ]; then
     sed -i "s/your-secret-key-min-32-chars-change-this-in-production/$SECRET_KEY/" .env
     sed -i "s/your-encryption-key-min-32-chars-change-this/$ENCRYPTION_KEY/" .env
 
-    echo "✅ .env file created with secure keys"
+    echo " .env file created with secure keys"
     echo ""
-    echo "⚠️  IMPORTANT: Edit .env and set:"
+    echo "  IMPORTANT: Edit .env and set:"
     echo "   - OPENAI_API_KEY or GEMINI_API_KEY"
     echo "   - Database passwords"
     echo ""
     read -p "Press Enter when you've updated .env file..."
 else
-    echo "✅ .env file already exists"
+    echo " .env file already exists"
 fi
 echo ""
 
@@ -67,27 +67,27 @@ if [ ! -f models/sam2_hiera_large.pt ]; then
     echo "Downloading SAM 2 models..."
     bash scripts/download_sam2_models.sh
 else
-    echo "✅ SAM 2 models already downloaded"
+    echo " SAM 2 models already downloaded"
 fi
 echo ""
 
 # Build Docker images
 echo "Building Docker images..."
 docker-compose build
-echo "✅ Docker images built"
+echo " Docker images built"
 echo ""
 
 # Start services
 echo "Starting services..."
 docker-compose up -d postgres redis neo4j minio
-echo "⏳ Waiting for databases to be ready..."
+echo " Waiting for databases to be ready..."
 sleep 10
 echo ""
 
 # Run migrations
 echo "Running database migrations..."
 docker-compose run --rm api alembic upgrade head
-echo "✅ Migrations complete"
+echo " Migrations complete"
 echo ""
 
 # Start all services
