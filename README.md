@@ -2,7 +2,7 @@
 
 A complete system that extracts objects from videos using SAM 2, tracks them across frames, detects interactions, builds a temporal knowledge graph, and generates AI-powered narratives explaining what happens in the video.
 
-## 🎯 Overview
+## Overview
 
 VOKG transforms raw videos into structured, queryable knowledge graphs with:
 - **Object Detection & Tracking**: SAM 2 segments every object and tracks them across frames
@@ -12,7 +12,7 @@ VOKG transforms raw videos into structured, queryable knowledge graphs with:
 - **Real-time Updates**: WebSocket notifications for processing progress
 - **REST API**: Full-featured API for video upload, graph queries, and narrative retrieval
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 ┌─────────────┐
@@ -49,14 +49,14 @@ VOKG transforms raw videos into structured, queryable knowledge graphs with:
 └─────────────────┘
 ```
 
-## 📋 Prerequisites
+##  Prerequisites
 
 - **Docker & Docker Compose**
 - **NVIDIA GPU** (for SAM 2 inference)
 - **NVIDIA Container Toolkit**
-- **OpenAI API Key** or **Google Gemini API Key**
+-  **Google Gemini API Key**
 
-## 🚀 Quick Start
+
 
 ### 1. Clone Repository
 
@@ -174,7 +174,7 @@ curl -X POST http://localhost:8000/api/v1/queries \
   }'
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 vokg-backend/
@@ -222,7 +222,7 @@ vokg-backend/
 └── .env.example
 ```
 
-## 🔧 Configuration
+##  Configuration
 
 All configuration is done via environment variables in `.env`:
 
@@ -252,7 +252,7 @@ All configuration is done via environment variables in `.env`:
 - `OPENAI_MODEL`: Model name (e.g., `gpt-4o`)
 - `LLM_MAX_RETRIES`: Number of critique/revision passes
 
-## 🔌 API Endpoints
+##  API Endpoints
 
 ### Authentication
 
@@ -294,7 +294,7 @@ All configuration is done via environment variables in `.env`:
 
 - `WS /ws/{video_id}?token={jwt}` - Real-time progress updates
 
-## 🧪 Development
+## Development
 
 ### Run Tests
 
@@ -332,7 +332,7 @@ docker-compose exec api alembic revision --autogenerate -m "Description"
 docker-compose exec api alembic upgrade head
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### GPU Not Detected
 
@@ -356,13 +356,13 @@ Reduce `SAM_BATCH_SIZE` or `SAM_POINTS_PER_SIDE` in `.env`.
 
 Check API key is valid and rate limits not exceeded.
 
-## 📊 Monitoring
+##  Monitoring
 
 - **Celery Flower**: http://localhost:5555 - Task monitoring
 - **Neo4j Browser**: http://localhost:7474 - Graph visualization
 - **MinIO Console**: http://localhost:9001 - Storage management
 
-## 🔐 Security Notes
+##  Security Notes
 
 - **NEVER** commit `.env` file
 - Rotate `SECRET_KEY` and `ENCRYPTION_KEY` regularly
@@ -371,7 +371,7 @@ Check API key is valid and rate limits not exceeded.
 - Restrict CORS origins to your frontend domain
 - Store API keys encrypted in database (already implemented)
 
-## 📈 Performance Tips
+##  Performance Tips
 
 1. **GPU Memory**: Adjust `SAM_BATCH_SIZE` based on GPU VRAM
 2. **Frame Extraction**: Lower `FRAME_EXTRACTION_FPS` for faster processing
@@ -379,7 +379,7 @@ Check API key is valid and rate limits not exceeded.
 4. **Database Indexes**: Already optimized in models
 5. **Caching**: Redis caching enabled for graph queries
 
-## 🤝 Contributing
+##  Contributing
 
 1. Fork repository
 2. Create feature branch
@@ -387,11 +387,11 @@ Check API key is valid and rate limits not exceeded.
 4. Push to branch
 5. Create Pull Request
 
-## 📝 License
+## License
 
 MIT License - See LICENSE file
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - [SAM 2](https://github.com/facebookresearch/sam2) - Meta AI
 - [FastAPI](https://fastapi.tiangolo.com/)
@@ -400,6 +400,7 @@ MIT License - See LICENSE file
 
 ---
 
-**Built with ❤️ for video understanding**
-#   V O K G  
+
+#   V O K G 
+ 
  
