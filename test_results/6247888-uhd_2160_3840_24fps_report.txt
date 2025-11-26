@@ -1,0 +1,59 @@
+VOKG Analysis Report
+============================================================
+
+File: 6247888-uhd_2160_3840_24fps.mp4
+
+Detected Objects (25):
+  - object_0 (appeared 15 times)
+  - object_1 (appeared 13 times)
+  - object_2 (appeared 1 times)
+  - object_3 (appeared 3 times)
+  - object_4 (appeared 3 times)
+  - object_5 (appeared 16 times)
+  - object_6 (appeared 1 times)
+  - object_7 (appeared 9 times)
+  - object_8 (appeared 13 times)
+  - object_9 (appeared 1 times)
+  - object_10 (appeared 14 times)
+  - object_11 (appeared 1 times)
+  - object_12 (appeared 1 times)
+  - object_13 (appeared 1 times)
+  - object_14 (appeared 13 times)
+  - object_15 (appeared 1 times)
+  - object_16 (appeared 1 times)
+  - object_17 (appeared 1 times)
+  - object_18 (appeared 3 times)
+  - object_19 (appeared 1 times)
+  - object_20 (appeared 4 times)
+  - object_21 (appeared 11 times)
+  - object_22 (appeared 4 times)
+  - object_23 (appeared 1 times)
+  - object_24 (appeared 1 times)
+
+Interactions (9):
+  - occlusion between obj_5 and obj_1 at t=3.0s (confidence: 0.12)
+  - occlusion between obj_5 and obj_1 at t=4.0s (confidence: 0.13)
+  - occlusion between obj_5 and obj_1 at t=7.0s (confidence: 0.12)
+  - occlusion between obj_21 and obj_20 at t=9.5s (confidence: 0.10)
+  - proximity between obj_21 and obj_0 at t=10.5s (confidence: 0.16)
+  - occlusion between obj_21 and obj_0 at t=10.5s (confidence: 0.11)
+  - occlusion between obj_1 and obj_10 at t=13.5s (confidence: 0.10)
+  - occlusion between obj_10 and obj_1 at t=14.0s (confidence: 0.18)
+  - occlusion between obj_5 and obj_1 at t=14.0s (confidence: 0.24)
+
+Knowledge Graph:
+  Nodes: 25
+  Edges: 9
+
+Narrative:
+Scene Analysis for '6247888-uhd_2160_3840_24fps.mp4':
+
+The scene contains 25 distinct object(s) tracked across frames.
+
+Detected 9 interaction(s):
+  - 8 occlusion interaction(s)
+  - 1 proximity interaction(s)
+
+Spatial relationships suggest objects are frequently near each other, indicating possible shared context or activity. Some objects overlap, suggesting layered depth or one object passing in front of another. 
+
+The objects maintain visual presence across multiple frames, demonstrating temporal consistency in the scene.

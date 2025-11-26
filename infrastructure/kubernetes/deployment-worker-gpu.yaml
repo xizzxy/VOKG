@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vokg-worker-gpu
+  namespace: vokg
+  labels:
+    app: vokg
+    component: worker-gpu
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vokg
+      component: worker-gpu
+  template:
+    metadata:
+      labels:
+        app: vokg
+        component: worker-gpu
+    spec:
+      serviceAccountName: vokg-worker
+      nodeSelector:
+        gpu: "true"
+        gpu-type: "nvidia-t4"  # or nvidia-a10g, nvidia-v100, etc.
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: worker
+        image: ${REGISTRY}/vokg-worker-gpu:${VERSION}
+        imagePullPolicy: Always
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: WORKER_TYPE
+          value: "gpu"
+        - name: CELERY_QUEUES
+          value: "gpu"
+        - name: CELERY_CONCURRENCY
+          value: "1"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: postgres-host
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: postgres-password
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: postgres-db
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: redis-host
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: redis-password
+        - name: S3_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: vokg-config
+              key: s3-endpoint
+        - name: S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: s3-access-key
+        - name: S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: s3-secret-key
+        - name: SAM_CHECKPOINT_PATH
+          value: "/models/sam2_hiera_large.pt"
+        - name: SAM_CONFIG_PATH
+          value: "/models/sam2_hiera_l.yaml"
+        resources:
+          requests:
+            memory: "8Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "16Gi"
+            cpu: "8000m"
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: models
+          mountPath: /models
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: vokg-models-pvc
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vokg-models-pvc
+  namespace: vokg
+spec:
+  accessModes:
+  - ReadOnlyMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd
+---
+# Note: GPU workers typically don't use HPA due to cost
+# Scale manually based on queue depth or use KEDA with Celery metrics
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vokg-worker-gpu-scaler
+  namespace: vokg
+spec:
+  scaleTargetRef:
+    name: vokg-worker-gpu
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  pollingInterval: 30
+  cooldownPeriod: 300
+  triggers:
+  - type: redis
+    metadata:
+      address: ${REDIS_HOST}:6379
+      password: ${REDIS_PASSWORD}
+      listName: gpu
+      listLength: "5"
+      activationListLength: "1"

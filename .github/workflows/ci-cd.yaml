@@ -1,0 +1,254 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: vokg_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+
+    - name: Run linting
+      run: |
+        pip install ruff
+        ruff check backend/
+
+    - name: Run type checking
+      run: |
+        pip install mypy
+        mypy backend/ || true
+
+    - name: Run tests
+      env:
+        POSTGRES_HOST: localhost
+        POSTGRES_USER: test
+        POSTGRES_PASSWORD: test
+        POSTGRES_DB: vokg_test
+        REDIS_HOST: localhost
+        SECRET_KEY: test-secret-key-min-32-characters-long
+      run: |
+        pytest backend/tests/ -v --cov=backend --cov-report=xml
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: backend
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Run linting
+      working-directory: frontend
+      run: npm run lint
+
+    - name: Run type checking
+      working-directory: frontend
+      run: npm run type-check
+
+    - name: Run tests
+      working-directory: frontend
+      run: npm test -- --coverage
+
+    - name: Build
+      working-directory: frontend
+      run: npm run build
+
+  build-and-push:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        image:
+          - name: api
+            dockerfile: infrastructure/docker/api.Dockerfile
+            context: .
+          - name: worker
+            dockerfile: infrastructure/docker/worker.Dockerfile
+            context: .
+          - name: gpu-worker
+            dockerfile: infrastructure/docker/gpu-worker.Dockerfile
+            context: .
+          - name: llm-worker
+            dockerfile: infrastructure/docker/llm-worker.Dockerfile
+            context: .
+          - name: frontend
+            dockerfile: infrastructure/docker/frontend.Dockerfile
+            context: .
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image.name }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ matrix.image.context }}
+        file: ${{ matrix.image.dockerfile }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging.vokg.example.com
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+    - name: Deploy to staging
+      run: |
+        export VERSION=${{ github.sha }}
+        export REGISTRY=${{ env.REGISTRY }}
+        envsubst < infrastructure/kubernetes/deployment-api.yaml | kubectl apply -f -
+        envsubst < infrastructure/kubernetes/deployment-worker-cpu.yaml | kubectl apply -f -
+        envsubst < infrastructure/kubernetes/deployment-worker-gpu.yaml | kubectl apply -f -
+        envsubst < infrastructure/kubernetes/deployment-worker-llm.yaml | kubectl apply -f -
+        envsubst < infrastructure/kubernetes/ingress.yaml | kubectl apply -f -
+
+    - name: Wait for rollout
+      run: |
+        kubectl rollout status deployment/vokg-api -n vokg --timeout=5m
+        kubectl rollout status deployment/vokg-worker-cpu -n vokg --timeout=5m
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    environment:
+      name: production
+      url: https://vokg.example.com
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG_PROD }}
+
+    - name: Deploy to production
+      run: |
+        export VERSION=${{ github.event.release.tag_name }}
+        export REGISTRY=${{ env.REGISTRY }}
+        envsubst < infrastructure/kubernetes/deployment-api.yaml | kubectl apply -f -
+        envsubst < infrastructure/kubernetes/deployment-worker-cpu.yaml | kubectl apply -f -
+        envsubst < infrastructure/kubernetes/deployment-worker-gpu.yaml | kubectl apply -f -
+        envsubst < infrastructure/kubernetes/deployment-worker-llm.yaml | kubectl apply -f -
+        envsubst < infrastructure/kubernetes/ingress.yaml | kubectl apply -f -
+
+    - name: Wait for rollout
+      run: |
+        kubectl rollout status deployment/vokg-api -n vokg --timeout=10m
+        kubectl rollout status deployment/vokg-worker-cpu -n vokg --timeout=10m
+        kubectl rollout status deployment/vokg-worker-gpu -n vokg --timeout=10m
+
+    - name: Run smoke tests
+      run: |
+        curl -f https://vokg.example.com/api/health || exit 1
+        curl -f https://vokg.example.com/ || exit 1
+
+    - name: Notify Slack
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        text: 'Production deployment ${{ job.status }}'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}

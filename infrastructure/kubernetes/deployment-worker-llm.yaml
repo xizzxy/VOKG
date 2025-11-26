@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vokg-worker-llm
+  namespace: vokg
+  labels:
+    app: vokg
+    component: worker-llm
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vokg
+      component: worker-llm
+  template:
+    metadata:
+      labels:
+        app: vokg
+        component: worker-llm
+    spec:
+      serviceAccountName: vokg-worker
+      containers:
+      - name: worker
+        image: ${REGISTRY}/vokg-worker-llm:${VERSION}
+        imagePullPolicy: Always
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: WORKER_TYPE
+          value: "llm"
+        - name: CELERY_QUEUES
+          value: "llm"
+        - name: CELERY_CONCURRENCY
+          value: "2"
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: postgres-host
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: postgres-password
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: postgres-db
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: redis-host
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: redis-password
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: openai-api-key
+              optional: true
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vokg-secrets
+              key: google-api-key
+              optional: true
+        - name: LLM_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: vokg-config
+              key: llm-provider
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vokg-worker-llm-hpa
+  namespace: vokg
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vokg-worker-llm
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max

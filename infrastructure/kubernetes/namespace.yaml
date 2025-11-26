@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vokg
+  labels:
+    name: vokg
+    environment: production
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vokg-api
+  namespace: vokg
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vokg-worker
+  namespace: vokg
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vokg-config
+  namespace: vokg
+data:
+  s3-endpoint: "https://s3.amazonaws.com"
+  llm-provider: "openai"
+  environment: "production"
+  log-level: "info"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vokg-secrets
+  namespace: vokg
+type: Opaque
+stringData:
+  # Database
+  postgres-host: ""  # Set via external secret management
+  postgres-user: ""
+  postgres-password: ""
+  postgres-db: "vokg"
+
+  # Redis
+  redis-host: ""
+  redis-password: ""
+
+  # Neo4j
+  neo4j-uri: ""
+  neo4j-user: "neo4j"
+  neo4j-password: ""
+
+  # S3
+  s3-access-key: ""
+  s3-secret-key: ""
+
+  # Application
+  secret-key: ""
+
+  # LLM APIs
+  openai-api-key: ""
+  google-api-key: ""

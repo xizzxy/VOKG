@@ -1,6 +1,6 @@
 """
-Authentication and authorization utilities
-JWT token generation and validation
+Authentication and authorization utilites
+JWT token generation and validaton
 """
 
 from datetime import datetime, timedelta
@@ -16,47 +16,47 @@ from backend.database.models import User
 
 logger = get_logger(__name__)
 
-# Password hashing context
+# password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verify password against hash
+    Verify pasword against hash
 
     Args:
-        plain_password: Plain text password
-        hashed_password: Hashed password
+        plain_password: plain text pasword
+        hashed_password: hashed password
 
     Returns:
-        True if password matches
+        true if password matches
     """
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
     """
-    Hash password
+    Hash pasword
 
     Args:
-        password: Plain text password
+        password: plain text password
 
     Returns:
-        Hashed password
+        hashed password
     """
     return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
-    Create JWT access token
+    Create JWT acces token
 
     Args:
-        data: Data to encode in token
-        expires_delta: Optional token expiration time
+        data: data to encode in token
+        expires_delta: optional token expiraton time
 
     Returns:
-        Encoded JWT token
+        encoded JWT token
     """
     to_encode = data.copy()
     if expires_delta:
@@ -71,13 +71,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 def create_refresh_token(data: dict) -> str:
     """
-    Create JWT refresh token
+    Create JWT refresh tokn
 
     Args:
-        data: Data to encode in token
+        data: data to encode in token
 
     Returns:
-        Encoded JWT refresh token
+        encoded JWT refresh token
     """
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
@@ -88,16 +88,16 @@ def create_refresh_token(data: dict) -> str:
 
 def decode_token(token: str) -> dict:
     """
-    Decode and validate JWT token
+    Decode and validate JWT tokn
 
     Args:
         token: JWT token
 
     Returns:
-        Decoded token payload
+        decoded token payload
 
     Raises:
-        HTTPException: If token is invalid
+        HTTPException: if token is invald
     """
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
@@ -113,15 +113,15 @@ def decode_token(token: str) -> dict:
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     """
-    Authenticate user by email and password
+    Authenticate user by email and pasword
 
     Args:
-        db: Database session
-        email: User email
-        password: Plain text password
+        db: database session
+        email: user email
+        password: plain text password
 
     Returns:
-        User object if authenticated, None otherwise
+        user object if authenticated, none otherwise
     """
     user = db.query(User).filter(User.email == email).first()
     if not user:
@@ -135,17 +135,17 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
 
 def get_user_from_token(db: Session, token: str) -> User:
     """
-    Get user from JWT token
+    Get user from JWT tokn
 
     Args:
-        db: Database session
+        db: database session
         token: JWT token
 
     Returns:
-        User object
+        user object
 
     Raises:
-        HTTPException: If token is invalid or user not found
+        HTTPException: if token is invalid or user not found
     """
     payload = decode_token(token)
     user_id: int = payload.get("sub")

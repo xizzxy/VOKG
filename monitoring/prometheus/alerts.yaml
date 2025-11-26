@@ -1,0 +1,241 @@
+groups:
+  - name: vokg_api_alerts
+    interval: 30s
+    rules:
+      - alert: APIHighErrorRate
+        expr: |
+          rate(http_requests_total{status=~"5..", job="vokg-api"}[5m])
+          / rate(http_requests_total{job="vokg-api"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High API error rate detected"
+          description: "API error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+      - alert: APIHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{job="vokg-api"}[5m])
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API latency is high"
+          description: "95th percentile latency is {{ $value }}s"
+
+      - alert: APIDown
+        expr: up{job="vokg-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "API is down"
+          description: "API has been down for more than 2 minutes"
+
+  - name: vokg_worker_alerts
+    interval: 30s
+    rules:
+      - alert: WorkerTaskFailureRate
+        expr: |
+          rate(celery_task_failed_total[10m])
+          / rate(celery_task_total[10m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: workers
+        annotations:
+          summary: "High worker task failure rate"
+          description: "Task failure rate is {{ $value | humanizePercentage }}"
+
+      - alert: GPUWorkerDown
+        expr: up{job="vokg-workers",component="worker-gpu"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: gpu-worker
+        annotations:
+          summary: "GPU worker is down"
+          description: "GPU worker has been down for more than 5 minutes"
+
+      - alert: HighQueueLength
+        expr: celery_queue_length{queue=~"gpu|cpu|llm"} > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: workers
+        annotations:
+          summary: "High queue length detected"
+          description: "Queue {{ $labels.queue }} has {{ $value }} pending tasks"
+
+      - alert: WorkerMemoryHigh
+        expr: |
+          container_memory_usage_bytes{pod=~"vokg-worker-.*"}
+          / container_spec_memory_limit_bytes{pod=~"vokg-worker-.*"} > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: workers
+        annotations:
+          summary: "Worker memory usage is high"
+          description: "Worker {{ $labels.pod }} is using {{ $value | humanizePercentage }} of memory"
+
+  - name: vokg_database_alerts
+    interval: 30s
+    rules:
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database is unreachable"
+
+      - alert: PostgreSQLHighConnections
+        expr: |
+          pg_stat_database_numbackends
+          / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "PostgreSQL connection usage is high"
+          description: "{{ $value | humanizePercentage }} of connections are in use"
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: cache
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache is unreachable"
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis is using {{ $value | humanizePercentage }} of allocated memory"
+
+      - alert: Neo4jDown
+        expr: neo4j_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: graph-db
+        annotations:
+          summary: "Neo4j is down"
+          description: "Neo4j graph database is unreachable"
+
+  - name: vokg_infrastructure_alerts
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (
+            irate(node_cpu_seconds_total{mode="idle"}[5m])
+          ) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage on {{ $labels.instance }} is {{ $value }}%"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage on {{ $labels.instance }} is {{ $value | humanizePercentage }}"
+
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs"}
+          / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Disk space is running low"
+          description: "Only {{ $value | humanizePercentage }} disk space available on {{ $labels.instance }}"
+
+      - alert: GPUUtilizationLow
+        expr: |
+          avg(dcgm_gpu_utilization{pod=~"vokg-worker-gpu-.*"}) < 20
+        for: 30m
+        labels:
+          severity: info
+          component: gpu
+        annotations:
+          summary: "GPU utilization is low"
+          description: "GPU usage has been below 20% for 30 minutes - consider scaling down"
+
+      - alert: GPUMemoryHigh
+        expr: |
+          (dcgm_fb_used / dcgm_fb_total) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU memory usage is high"
+          description: "GPU memory usage is {{ $value | humanizePercentage }}"
+
+  - name: vokg_business_alerts
+    interval: 60s
+    rules:
+      - alert: VideoProcessingStalled
+        expr: |
+          rate(vokg_video_processed_total[30m]) == 0
+          and vokg_queue_length{queue="gpu"} > 0
+        for: 30m
+        labels:
+          severity: critical
+          component: processing
+        annotations:
+          summary: "Video processing appears stalled"
+          description: "No videos have been processed in 30 minutes despite pending queue"
+
+      - alert: HighVideoProcessingTime
+        expr: |
+          histogram_quantile(0.95,
+            rate(vokg_video_processing_duration_seconds_bucket[1h])
+          ) > 1800
+        for: 1h
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "Video processing time is high"
+          description: "95th percentile processing time is {{ $value }}s ({{ $value | humanizeDuration }})"
+
+      - alert: LLMAPIErrorRate
+        expr: |
+          rate(vokg_llm_request_errors_total[10m])
+          / rate(vokg_llm_requests_total[10m]) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          component: llm
+        annotations:
+          summary: "High LLM API error rate"
+          description: "LLM API error rate is {{ $value | humanizePercentage }}"

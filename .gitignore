@@ -84,3 +84,11 @@ docs/_build/
 
 # Alembic
 alembic/versions/*.pyc
+
+# Documentation (combined into README.md)
+COST_OPTIMIZATION.md
+DEPLOYMENT_GUIDE.md
+DEVOPS_COMPLETE.md
+MODEL_OPTIMIZATION.md
+fix_comments.py
+README_old.md

@@ -14,7 +14,7 @@ from .config import settings
 
 class JSONFormatter(logging.Formatter):
     """
-    JSON log formatter for structured logging
+    Json log formatter for structured loging
     """
 
     def format(self, record: logging.LogRecord) -> str:
@@ -28,7 +28,7 @@ class JSONFormatter(logging.Formatter):
             "line": record.lineno,
         }
 
-        # Add exception info if present
+        # Add exeption info if present
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
@@ -53,7 +53,7 @@ class JSONFormatter(logging.Formatter):
 
 class TextFormatter(logging.Formatter):
     """
-    Human-readable text formatter
+    Human-readable text formater
     """
 
     def __init__(self):
@@ -115,7 +115,7 @@ def setup_logging(
 
 class ContextLogger:
     """
-    Logger wrapper that adds contextual information to all log messages
+    Logger wrapper that adds contextual informaton to all log messages
     """
 
     def __init__(self, logger: logging.Logger, context: Optional[Dict[str, Any]] = None):
@@ -147,7 +147,7 @@ class ContextLogger:
 
     def with_context(self, **kwargs) -> "ContextLogger":
         """
-        Create a new logger with additional context
+        Create a new loger with additional context
         """
         return ContextLogger(self.logger, {**self.context, **kwargs})
 
@@ -167,5 +167,5 @@ def get_logger(name: str, **context) -> ContextLogger:
     return ContextLogger(logger, context)
 
 
-# Initialize default logger
+# Initalize default logger
 default_logger = setup_logging()

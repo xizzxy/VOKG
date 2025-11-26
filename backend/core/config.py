@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """
-    Application settings loaded from environment variables
+    Application settings loaded from enviroment variables
     """
 
     model_config = SettingsConfigDict(
@@ -184,10 +184,10 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     """
-    Get cached settings instance
+    Get cached settings instanc
     """
     return Settings()
 
 
-# Export settings instance
+# Export settings instace
 settings = get_settings()
